@@ -135,3 +135,8 @@ $RECYCLE.BIN/
 node_modules/
 .cache/.claude/
 venv/
+
+# Rust build artifacts
+rust/target/
+target/
+# 应用类项目提交 Cargo.lock 以保证可复现构建（故不忽略）

@@ -280,16 +280,49 @@ def run_cmd(args, long_running=False):
         print(f"[!] 无法运行: {e}")
 
 
+def find_rust_bin():
+    """定位已编译的 Rust 二进制 jybot-rs（找不到返回 None）。"""
+    exe = "jybot-rs.exe" if os.name == "nt" else "jybot-rs"
+    cands = [
+        ROOT / "rust" / "target" / "release" / exe,
+        ROOT / "rust" / "target" / "debug" / exe,
+    ]
+    tgt = os.environ.get("CARGO_TARGET_DIR")
+    if tgt:
+        cands += [Path(tgt) / "release" / exe, Path(tgt) / "debug" / exe]
+    for c in cands:
+        if c.exists():
+            return c
+    return None
+
+
+def run_rust(extra_args, long_running=False):
+    rb = find_rust_bin()
+    if rb is None:
+        print("\n  未找到 Rust 二进制 jybot-rs。请先编译：")
+        print("    cd rust && cargo build --release")
+        print("  （Linux VPS 上最顺；详见 rust/README.md）")
+        return
+    run_cmd([str(rb), *extra_args], long_running=long_running)
+
+
 def launch_menu():
     while True:
         clear()
+        rust_state = "已编译" if find_rust_bin() else "未编译"
         hr()
         print("  启动机器人")
         hr()
+        print("  -- Python 引擎 --")
         print("  1) 测试模式     python main.py --test-mode   (有界纸面演示)")
         print("  2) 模拟交易     python main.py --simulation  (纸面, 真实时钟)")
         print("  3) 模拟+守护    python supervisor.py --simulation (自动重启)")
         print("  4) 实盘 LIVE    python main.py --live        [危险, 需确认]")
+        print(f"  -- Rust 引擎 (WebSocket 事件驱动, {rust_state}) --")
+        print("  5) Rust 测试    jybot-rs --test-mode")
+        print("  6) Rust 模拟    jybot-rs --simulation")
+        print("  7) Rust 统计    jybot-rs stats")
+        print("  8) Rust 实盘    jybot-rs --live              [危险, 需确认]")
         print("  0) 返回上级菜单")
         hr("-")
         c = ask("请选择: ")
@@ -305,8 +338,40 @@ def launch_menu():
         elif c == "4":
             launch_live()
             pause()
+        elif c == "5":
+            run_rust(["--test-mode"])
+            pause()
+        elif c == "6":
+            run_rust(["--simulation"], long_running=True)
+            pause()
+        elif c == "7":
+            run_rust(["stats"])
+            pause()
+        elif c == "8":
+            launch_live_rust()
+            pause()
         elif c in ("0", "q", ""):
             return
+
+
+def launch_live_rust():
+    vals = read_env_values()
+    dry = vals.get("DRY_RUN", "true").lower()
+    live = vals.get("LIVE_TRADING", "false").lower()
+    clear()
+    hr("!")
+    print("  Rust 实盘 LIVE —— 真实资金风险")
+    hr("!")
+    print(f"  当前 .env:  DRY_RUN={dry}   LIVE_TRADING={live}")
+    if dry != "false" or live != "true":
+        print("\n  [安全锁未打开] 需先设置 DRY_RUN=false 且 LIVE_TRADING=true。")
+        print("  （即便强行运行，jybot-rs 也会拒绝启动）")
+        return
+    print("\n  风险提示: 将向 Polymarket 提交真实订单。")
+    if ask('\n  确认请输入大写 YES: ') != "YES":
+        print("  已取消。")
+        return
+    run_rust(["--live"], long_running=True)
 
 
 def launch_live():

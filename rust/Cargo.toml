@@ -1,0 +1,36 @@
+[package]
+name = "jybot-rs"
+version = "1.0.0"
+edition = "2021"
+description = "Polymarket BTC 5-min UP/DOWN trading bot — Rust core (WebSocket + tokio)"
+
+[[bin]]
+name = "jybot-rs"
+path = "src/main.rs"
+
+[dependencies]
+# 异步运行时
+tokio = { version = "1", features = ["full"] }
+# WebSocket 长连接（Polymarket 盘口 + BTC 价格）
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+# REST 备用（盘口/市场发现/结算查询）
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+# 序列化
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# 精确价格
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+# 配置 / 时间 / 错误 / 日志
+dotenvy = "0.15"
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+# 只用 ring 作为 rustls 加密后端（关掉默认的 aws-lc-rs，免去 VPS 上 cmake/nasm 依赖）
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

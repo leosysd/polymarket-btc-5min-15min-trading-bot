@@ -250,6 +250,30 @@ requirements.txt      # 依赖
 
 ---
 
+## 11. Rust 核心（高性能 WebSocket 版，可选）
+
+仓库内 `rust/` 目录是用 **Rust + tokio** 重写的核心机器人（参考 [leosysd/JY_RUST](https://github.com/leosysd/JY_RUST) 架构）。与 Python 版相比，它把行情/盘口判断从 HTTP 轮询升级为 **WebSocket 长连接 + 事件驱动**：
+
+- **Polymarket 盘口 WS**：`wss://ws-subscriptions-clob.polymarket.com/ws/market`，订阅当前盘 Up/Down token，`book`/`price_change` 一到即更新缓存。
+- **BTC 价格 WS**：Binance 公共镜像 aggTrade 流，每笔成交即推送。
+- **事件驱动**：盘口或价格一更新立刻触发策略判断（`tokio::select!`），看到机会延迟≈0。
+- **REST 兜底**：WS 断线或数据过期（`WS_STALENESS_SEC`）时自动回退 REST。
+- **安全逻辑、`.env`、胜率/PnL 统计**：与 Python 版完全一致。
+- **实盘下单**：Rust 负责全部行情/策略；真正提交订单复用 Python 官方 `py-clob-client`（`scripts/place_order.py`）。
+
+```bash
+cd rust && cargo build --release          # 编译（Linux VPS 上最顺）
+./target/release/jybot-rs --test-mode     # 有界纸面演示
+./target/release/jybot-rs --simulation    # WS 事件驱动纸面模拟
+./target/release/jybot-rs check           # 检查配置
+./target/release/jybot-rs stats           # 胜率 / PnL
+./target/release/jybot-rs --live          # 实盘（需安全锁 + 输入 YES）
+```
+
+详见 [`rust/README.md`](rust/README.md)。Python 版与 Rust 版共用同一个 `.env` 和 `paper_trades.json`。
+
+---
+
 ## 免责声明
 
 加密货币与预测市场交易存在**重大亏损风险**。本软件仅用于学习与研究，过往表现不代表未来收益，作者不对任何资金损失负责。请先用模拟模式、小额资金，仅使用你能承受全部损失的资金进行交易。
