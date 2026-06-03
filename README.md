@@ -32,6 +32,20 @@ python main.py --test-mode
 python main.py --simulation
 ```
 
+### 推荐：交互式菜单（不想敲命令就用它）
+
+```bash
+python menu.py
+```
+
+一个纯标准库的终端菜单，集成了**启动 / 配置 / 工具**三大功能，新手强烈推荐：
+
+- **启动机器人**：一键跑 test-mode / simulation / supervisor；实盘 `--live` 入口带二次确认（需输入大写 `YES`，且安全锁未打开时直接拦截）。
+- **配置 `.env`**：按分组（市场周期 / 安全开关 / 钱包API / 网络 / 下单 / 入场 / 离场 / 运行 / Redis）读写所有参数，**带类型校验**（bool/int/float/枚举），改完可立即跑 `check_config`。
+- **工具**：一键运行 `check_config` / `health_check` / `view_trades` / `regen_polymarket_keys`，以及查看最近日志。
+
+安全设计：没有 `.env` 会自动从 `.env.example` 复制；每次保存前自动备份为 `.env.backup-时间戳`；私钥 / API_KEY / API_SECRET / PASSPHRASE **显示时一律打码**（如 `0x12****beef`），绝不明文打印；把 `LIVE_TRADING=true` 或 `DRY_RUN=false` 这类危险开关打开时，必须输入大写 `YES` 才会保存。菜单**只写入 `.env`，绝不改动代码**。
+
 ---
 
 ## 2. 启动命令
@@ -178,6 +192,7 @@ journalctl -u jy-bot -f
 
 | 脚本 | 作用 |
 | --- | --- |
+| `python menu.py` | 交互式菜单：启动 / 配置 `.env` / 工具（推荐） |
 | `python scripts/check_config.py` | 检查 `.env` 是否完整、合法 |
 | `python scripts/health_check.py` | 检查能否连上 Gamma / CLOB / 行情源 / Redis / RPC |
 | `python scripts/regen_polymarket_keys.py` | 生成 Polymarket CLOB API 凭证 |
