@@ -38,7 +38,7 @@ def run_supervisor() -> None:
     bot_args = sys.argv[1:] if len(sys.argv) > 1 else []
 
     print("=" * 80)
-    print("BTC 15-MIN TRADING BOT — AUTO-RESTART SUPERVISOR")
+    print("POLYMARKET BTC UP/DOWN TRADING BOT -- AUTO-RESTART SUPERVISOR")
     print("=" * 80)
     print(f"Platform:    {sys.platform}")
     print(f"Python:      {python_cmd}")
@@ -79,12 +79,18 @@ def run_supervisor() -> None:
             print(f"Exit code: {exit_code}")
             print("=" * 80)
 
-            # Normal termination codes → short restart delay
+            # Configuration refusal (live safety gate / missing creds) -> stop.
+            if exit_code == 2:
+                print("Configuration error (exit code 2) -- not restarting.")
+                print("Fix .env then re-run. Try: python scripts/check_config.py")
+                break
+
+            # Normal termination codes -> short restart delay
             if exit_code in (0, 143, 15, -15):
-                print("Normal auto-restart — loading fresh market filters...")
+                print("Normal auto-restart -- loading fresh markets...")
                 wait_time = 2
             else:
-                print(f"Error detected (code {exit_code}) — waiting before retry...")
+                print(f"Error detected (code {exit_code}) -- waiting before retry...")
                 wait_time = 10
 
             print(f"Restarting in {wait_time} seconds...")

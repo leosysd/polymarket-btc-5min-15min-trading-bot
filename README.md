@@ -1,255 +1,240 @@
-# Polymarket Trading Bot
+# Polymarket BTC 5 分钟 UP/DOWN 自动交易机器人
 
-**What is your native language?**
-[🇨🇳 中文](README.zh.md) · [🇷🇺 Русский](README.ru.md)
+一个**开箱即用、可直接部署**的 Polymarket 比特币 5 分钟「涨/跌」（UP/DOWN）市场自动交易机器人。
 
----
+核心设计目标：**你只需要填 `.env`，不需要改任何代码**。
 
-<p align="center">
-  <strong>⭐ Want more profitable trading bots?</strong><br><br>
-  Built by <a href="https://github.com/gamma-trade-lab"><strong>Gamma Trade Lab</strong></a> — high-performance automated trading systems for Polymarket.<br><br>
-  <a href="https://github.com/gamma-trade-lab"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-gamma--trade--lab-181717?logo=github&logoColor=white"></a>&nbsp;
-  <a href="mailto:gammatradeorg@gmail.com"><img alt="Email" src="https://img.shields.io/badge/Email-gammatradeorg@gmail.com-EA4335?logo=gmail&logoColor=white"></a>&nbsp;
-  <a href="https://t.me/RetroValix"><img alt="Telegram" src="https://img.shields.io/badge/Telegram-@RetroValix-26A5E4?logo=telegram&logoColor=white"></a>
-</p>
+- ✅ 默认 **dry-run（纸面模拟）**，绝不会拿真钱下单
+- ✅ 自动从 Polymarket Gamma / CLOB API **动态发现** BTC 5 分钟市场（不写死任何 market_id / token_id）
+- ✅ 固定份额（`FIXED_SHARES`）限价下单，支持 **FOK / FAK / GTC**
+- ✅ 只有在 `.env` 里把 `LIVE_TRADING=true` 且 `DRY_RUN=false`、并用 `--live` 启动后，才会真实下单
+- ✅ 模拟路径**只依赖 Python 标准库**，干净机器上也能跑 `python main.py --test-mode`
+- ✅ 自带配置检查、健康检查、一键安装、systemd 服务文件
 
 ---
 
-## Proof of work
-
-<img width="1919" height="1035" alt="1" src="https://github.com/user-attachments/assets/27f00a58-db8d-4992-a1ed-1b5ee741bede" />
-
-<img width="1919" height="1032" alt="2" src="https://github.com/user-attachments/assets/447c9671-3f47-4bde-a4be-744af27bdbb1" />
-
-<img width="1916" height="1008" alt="4" src="https://github.com/user-attachments/assets/8b88610b-c54b-4e3d-b7a6-2ccef7b72ca4" />
-
-<img width="1823" height="942" alt="3" src="https://github.com/user-attachments/assets/f7052333-8107-40d8-9703-d1bbd2b77bc7" />
-
----
-
-## Core Idea
-
-Prediction markets for short-horizon BTC moves are noisy and fast. This project treats them like a **systematic trading problem**: pull in market and context data, normalize it through a single ingestion path, fuse multiple detectors into a decision, then execute through a broker adapter with **hard risk limits** (small size per trade, take profit parameters). The goal is not "one magic signal" but a **testable stack** you can run in simulation, observe in Grafana, and only then point at live capital.
-
----
-
-## Features
-
-- **Seven-phase pipeline** — External feeds → ingestion → Nautilus core → signal processors and fusion → execution and risk → monitoring → feedback / learning hooks.
-- **Multi-signal stack** — Spike detection, sentiment-style inputs, divergence logic, order-book and momentum-style processors, plus fusion to combine votes.
-- **Risk-first defaults** — Configurable caps (e.g. ~$1 per trade), take profit, entry-price band, spread filter, direction lock, and anti-chase guard.
-- **Stop-loss toggle** — `ENABLE_STOP_LOSS=false` lets positions ride to take-profit or settlement; flip to `true` to re-enable the early-exit SL.
-- **ML edge gate** — Only bets when the XGBoost model's probability is at least `MIN_ML_EDGE` (default 10 pp) away from Polymarket's price.
-- **One bet per market** — `MAX_TRADES_PER_MARKET=1` fires a single entry per 15-min slot and moves on.
-- **Simulation and live** — Run paper / test modes without touching production keys; switch to live only when ready.
-- **Operational tooling** — Redis-based mode hints, Grafana-friendly metrics, paper trade inspection, auto-restart wrapper for long runs.
-- **Self-learning hook** — Weights can be adjusted from performance feedback (see `feedback/` and strategy configuration).
-- **Resilience** — WebSocket handling, rate limiting, validation, and patches around Polymarket + Nautilus edge cases (Gamma loading, market-order sizing, Windows `prometheus_client` guard).
-
----
-
-## Prerequisites
-
-- **Python 3.14+**
-- **Redis** — used for mode switching and related control-plane behavior
-- **Polymarket account** with API credentials for live trading
-- **Git**
-
----
-
-## Quick Start
-
-### 1. Clone the repository
+## 1. 快速开始（3 步）
 
 ```bash
-git clone https://github.com/yourusername/polymarket-btc-15m-bot.git
-cd polymarket-btc-15m-bot
-```
-
-### 2. Create a virtual environment
-
-```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
-
-# macOS / Linux
-python -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure environment variables
-
-```bash
+# 1) 复制配置文件（你之后只改这个文件）
 cp .env.example .env
-```
 
-Edit `.env` with your credentials and parameters:
+# 2) 校验配置（默认 dry-run 配置即可通过）
+python scripts/check_config.py
 
-```env
-POLYMARKET_PK=your_private_key_here
-POLYMARKET_API_KEY=your_api_key_here
-POLYMARKET_API_SECRET=your_api_secret_here
-POLYMARKET_PASSPHRASE=your_passphrase_here
-
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_DB=2
-
-ENABLE_STOP_LOSS=false
-TAKE_PROFIT_PCT=0.40
-MIN_ENTRY_PRICE=0.25
-MAX_ENTRY_PRICE=0.75
-MAX_TRADES_PER_MARKET=1
-MIN_ML_EDGE=0.10
-```
-
-### 5. Start Redis
-
-```bash
-redis-server
-```
-
-On macOS with Homebrew: `brew install redis && redis-server`.
-On Debian/Ubuntu: `sudo apt install redis-server && redis-server`.
-
-### 6. Run the bot
-
-```bash
-# Fast test loop (simulated trades ~every minute)
+# 3) 跑一个有界的纸面演示（离线也能跑，约 3 轮后自动退出）
 python main.py --test-mode
+```
 
-# Normal simulation (15-min clock)
+想长期模拟（真实行情、真实时钟、纸面成交）：
+
+```bash
 python main.py --simulation
-
-# Live trading (real money — requires valid credentials)
-python supervisor.py --live
 ```
 
 ---
 
-## Configuration
+## 2. 启动命令
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `ENABLE_STOP_LOSS` | Enable early stop-loss exit | `false` |
-| `STOP_LOSS_PCT` | Capital fraction lost at SL (only when SL enabled) | `0.50` |
-| `TAKE_PROFIT_PCT` | Fraction of remaining upside to take | `0.40` |
-| `MIN_ENTRY_PRICE` | Minimum token price to enter | `0.25` |
-| `MAX_ENTRY_PRICE` | Maximum token price to enter | `0.75` |
-| `MAX_SPREAD_PCT` | Max bid-ask spread relative to mid | `0.05` |
-| `ENTRY_COOLDOWN_SEC` | Seconds between entry attempts | `90` |
-| `MAX_TRADES_PER_MARKET` | Max entries per 15-min market | `1` |
-| `LOCK_MARKET_DIRECTION` | Lock direction after first trade on a market | `true` |
-| `MAX_CHASE_DELTA` | Max price delta allowed for re-entry | `0.12` |
-| `MIN_ML_EDGE` | Min ML probability gap required to bet | `0.10` |
-| `LATE_ENTRY_CUTOFF_SEC` | Refuse entries this close to settlement | `120` |
-| `MARKET_BUY_USD` | USD per order | `1.00` |
+| 命令 | 说明 | 是否真钱 |
+| --- | --- | --- |
+| `python main.py --test-mode` | 有界纸面演示，离线友好（默认 3 轮） | 否（强制纸面） |
+| `python main.py --simulation` | 纸面交易，真实 5 分钟市场时钟 | 否（强制纸面） |
+| `python main.py --live` | **真实下单**，需通过安全锁 | 是 |
+| `python supervisor.py --simulation` | 带自动重启的模拟运行 | 否 |
+| `python supervisor.py --live` | 带自动重启的实盘运行 | 是 |
 
-See `.env.example` for the full list with inline comments.
+可选参数：
+
+- `--interval 5m` / `--interval 15m`：临时覆盖 `MARKET_INTERVAL`
+- `--verbose`：DEBUG 级别日志
 
 ---
 
-## Running the Bot
+## 3. 实盘安全锁（三重保险）
 
-- **Unified entrypoint**: `main.py` supports `--test-mode`, `--simulation`, and `--live`.
-- **Auto-restart wrapper**: `supervisor.py` runs `main.py` in a loop for unattended operation.
-- **Paper trades**: After simulation runs, inspect history with:
+只有**同时满足**以下三点，机器人才会签名并提交真实订单：
+
+1. 用 `python main.py --live` 启动
+2. `.env` 中 `DRY_RUN=false`
+3. `.env` 中 `LIVE_TRADING=true`
+
+任何一个不满足，都会保持纸面模式。`--test-mode` 和 `--simulation` 永远强制纸面，**无视** `.env` 里的开关。
+
+如果用 `--live` 启动但安全锁没打开，机器人会**拒绝启动**并提示你去改 `.env`（退出码 2，supervisor 不会无限重启）。
+
+> ⚠️ 实盘风险提示：5 分钟二元市场到期后，输的一方 token 结算为 0，即亏损约 100% 本金。请从最小 `FIXED_SHARES`、最小 `MAX_POSITION_USDC` 开始，自行承担风险。
+
+---
+
+## 4. 配置说明（`.env`）
+
+所有参数都在 `.env`，改完即生效，无需改代码。
+
+### 市场周期
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `MARKET_INTERVAL` | `5m` | `5m` 或 `15m` |
+
+### 安全开关
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `DRY_RUN` | `true` | true = 纸面模拟 |
+| `LIVE_TRADING` | `false` | true = 允许实盘（仍需 `DRY_RUN=false` + `--live`） |
+
+### 钱包 / API 凭证（仅实盘需要）
+| 变量 | 说明 |
+| --- | --- |
+| `POLYMARKET_PRIVATE_KEY` | 签名订单的 EOA 私钥 |
+| `POLYMARKET_API_KEY` / `POLYMARKET_API_SECRET` / `POLYMARKET_API_PASSPHRASE` | CLOB API 凭证，用 `python scripts/regen_polymarket_keys.py` 生成 |
+| `PM_FUNDER_ADDRESS` | 持有 USDC 的地址（Polymarket 充值地址 / 代理 Safe） |
+| `POLYMARKET_SIG_TYPE` | `0`=EOA `1`=POLY_PROXY `2`=POLY_GNOSIS_SAFE（默认 2） |
+| `CHAIN_ID` | 默认 137（Polygon） |
+
+### 网络
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `RPC_URL` | `https://polygon-rpc.com` | 链上结算校验用 |
+| `WSS_URL` | 空 | 可选 websocket |
+| `GAMMA_API_URL` / `CLOB_API_URL` | 公共端点 | 一般不用改 |
+
+### 下单
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `FIXED_SHARES` | `5` | 每单固定份额（市场最小为 5） |
+| `ORDER_TYPE` | `FOK` | `FOK` 全成或撤 / `FAK` 部分成交后撤 / `GTC` 挂单 |
+| `SLIPPAGE_BPS` | `100` | 滑点，100bps = 1%（BUY 加在最优卖价上，SELL 减在最优买价上） |
+| `MAX_POSITION_USDC` | `5` | 单仓名义上限 |
+| `MAX_TRADES_PER_MARKET` | `1` | 每个市场最多下单次数 |
+
+### 入场过滤
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `MIN_ENTRY_PRICE` / `MAX_ENTRY_PRICE` | `0.25` / `0.75` | 价格不在区间内不进场 |
+| `MAX_SPREAD_PCT` | `0.05` | 点差过大不进场 |
+| `LATE_ENTRY_CUTOFF_SEC` | `45` | 距结算不足 45 秒不进场 |
+| `EARLY_ENTRY_CUTOFF_SEC` | `0` | 开盘后多少秒才允许进场 |
+| `MIN_ML_EDGE` | `0.10` | 模型概率 − 市场卖价 的最小优势 |
+
+### 离场
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `TAKE_PROFIT_PCT` | `0.40` | TP = entry + 0.40 ×(1 − entry) |
+| `ENABLE_STOP_LOSS` | `false` | 是否启用止损 |
+| `STOP_LOSS_PCT` | `0.50` | SL = entry − 0.50 × entry |
+
+### 运行 / 信号
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `POLL_INTERVAL_SEC` | `3` | 主循环轮询间隔 |
+| `SIGNAL_LOOKBACK_MIN` | `3` | 信号回看分钟数 |
+| `PRICE_FEED` | `coinbase` | `coinbase` 或 `binance`（binance 部分地区被封） |
+| `REDIS_HOST/PORT/DB` | localhost/6379/2 | 可选 |
+
+---
+
+## 5. 下单逻辑（与需求一致）
+
+- **固定份额**：每个 BUY 订单 `size = FIXED_SHARES`；绝不把市价单的 USD 金额当份额。
+- **限价单**：BUY 与 SELL 都是限价单。
+  - BUY 价 = 最优卖价 ×(1 + `SLIPPAGE_BPS`)，并按 tick 取整。
+  - SELL 价 = 最优买价 ×(1 − `SLIPPAGE_BPS`)。
+- **SELL 不超持仓**：卖出份额自动 `min(size, 当前持仓)`。
+- **订单类型**：`FOK` 必须全部成交否则取消；`FAK` 允许部分成交、剩余取消；`GTC` 剩余挂在盘上。
+- **5 分钟专用**：每个市场最多 `MAX_TRADES_PER_MARKET` 次；距结算 < `LATE_ENTRY_CUTOFF_SEC` 不进场；市场结算后自动切到下一个 5 分钟市场。
+- **异常处理**：市场未开放 / token_id 缺失 / 流动性不足 / 盘口为空 / API 限流（429 自动退避重试）都会被安全跳过并记录日志。
+
+每一次决策日志都会显示：当前市场 slug、UP/DOWN token、价格、信号、是否下单、下单/不下单的原因。
+
+---
+
+## 6. 部署到服务器（systemd）
 
 ```bash
-python scripts/view_trades.py
+# 1) 放到 /opt/jy-bot 并安装
+sudo mkdir -p /opt/jy-bot && sudo chown $USER /opt/jy-bot
+cp -r . /opt/jy-bot && cd /opt/jy-bot
+bash scripts/install.sh          # 建 venv、装依赖、生成 .env、检查 Redis、校验配置
+
+# 2) 编辑配置
+nano /opt/jy-bot/.env
+
+# 3) 安装服务（先按需修改 jy-bot.service 里的 User / WorkingDirectory / ExecStart）
+sudo cp jy-bot.service /etc/systemd/system/jy-bot.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now jy-bot
+
+# 4) 看日志
+journalctl -u jy-bot -f
 ```
 
----
-
-## Monitoring
-
-- Metrics exporters and helpers live under `monitoring/`.
-- Grafana dashboard assets live under `grafana/` (import with `grafana/import_dashboard.py`).
-
-Wire these to your own Prometheus/Grafana stack as needed.
+`jy-bot.service` 默认以 `--simulation` 启动。确认无误后，把 `.env` 改成
+`DRY_RUN=false` + `LIVE_TRADING=true`，并把 `ExecStart` 改成 `--live`，再
+`systemctl restart jy-bot`。
 
 ---
 
-## Trading Modes
+## 7. 实用脚本
 
-Mode switching via Redis is supported for toggling simulation vs live without restarting; see `scripts/redis_control.py`.
+| 脚本 | 作用 |
+| --- | --- |
+| `python scripts/check_config.py` | 检查 `.env` 是否完整、合法 |
+| `python scripts/health_check.py` | 检查能否连上 Gamma / CLOB / 行情源 / Redis / RPC |
+| `python scripts/regen_polymarket_keys.py` | 生成 Polymarket CLOB API 凭证 |
+| `python scripts/view_trades.py` | 查看纸面交易记录（`paper_trades.json`） |
+| `bash scripts/install.sh` | 一键安装 |
 
 ---
 
-## Testing Individual Phases
+## 8. 工作原理
 
-Run the numbered checks **in order** after each previous phase succeeds.
-
-| Phase | Focus | Command |
-|-------|-------|---------|
-| 1 | Data sources (exchanges, news) | `python scripts/test_data_sources.py test` |
-| 2 | Ingestion (adapter, websockets, validation) | `python scripts/test_ingestion.py test` |
-| 3 | Nautilus core (instruments, engine, events) | `python scripts/test_nautilus.py test` |
-| 4 | Strategy brain (processors, fusion) | `python scripts/test_strategy.py test` |
-| 5 | Execution (risk, client, engine) | `python scripts/test_execution.py test` |
-
-Debug the Gamma API directly:
-
-```bash
-python scripts/debug_gamma_api.py
+```
+发现当前活跃 5m 市场  ->  计算信号 + 过滤  ->  固定份额限价下单（一单）
+        ^                                              |
+        +------------ 结算后切换下一个市场 <-- 管理 TP/SL/结算
 ```
 
----
-
-## How Much Money Do I Need to Start?
-
-The reference configuration uses **~$1 per fill**. You still need enough balance to cover fees, spread, and a string of losses. Many operators keep **$10–$50** for early experiments; scale only after simulation matches expectations. **This is not financial advice.**
-
----
-
-## Is This Profitable?
-
-There is **no guarantee** of profit. Short-horizon markets have fees, spread, adverse selection, and outages. Simulation results **do not** reliably predict live performance. Use paper mode and small size first; treat every run as an experiment.
+- **市场发现**：根据当前时间对齐到 300 秒，计算 slug `btc-updown-5m-{unix时间戳}`，从 Gamma `/markets` 动态拉取当前及临近窗口的市场，全部动态、无硬编码。
+- **盘口**：从 CLOB `/book?token_id=...` 读取，best bid = 买盘最高价，best ask = 卖盘最低价。
+- **信号**：用 Coinbase/Binance 1 分钟 K 线计算窗口起点至今的漂移 + 短期动量，logistic 映射成 P(涨)；与市场隐含价比较得到 edge，`edge >= MIN_ML_EDGE` 才下注。
+- **结算**：到期后优先用 Gamma 的 `outcomePrices` 判定输赢，拿不到则用行情源对比（现价 vs 窗口起点价）兜底。
 
 ---
 
-## Best For
+## 9. 目录结构（新引擎）
 
-- **Traders who want speed and automation** for 15-minute crypto prediction markets.
-- **Developers** comfortable editing `.env`, reading logs, and running phase tests.
-- **People who treat risk as primary** and want explicit caps and observability before scaling.
+```
+main.py               # 入口：--test-mode / --simulation / --live 分发 + 安全锁
+supervisor.py         # 自动重启包装器
+jybot/                # 自包含 5 分钟引擎（纸面路径仅依赖标准库）
+  config.py           # 所有参数的唯一来源（读 .env）
+  envload.py          # 极简 .env 加载器（无需 python-dotenv）
+  markets.py          # 动态市场发现 + 盘口
+  signal.py           # BTC 涨跌概率信号
+  executor.py         # 固定份额限价下单（纸面 + 实盘 / FOK/FAK/GTC）
+  engine.py           # 主循环 + 市场轮换
+  state.py            # 持仓与纸面成交记录
+scripts/
+  check_config.py     # 配置校验
+  health_check.py     # 连通性检查
+  install.sh          # 一键安装
+.env.example          # 配置模板
+jy-bot.service        # systemd 服务
+requirements.txt      # 依赖
+```
 
----
-
-## Contributing and Ideas
-
-Contributions are welcome via the usual GitHub flow (fork, branch, pull request).
-
-**Ideas for contributions:**
-- Add derivatives context (funding, open interest) as additional processors.
-- New signal processors or fusion rules.
-- Telegram or Discord alerts for fills and errors.
-- A small web UI for config and status.
-- Extend beyond BTC to ETH, SOL, and other Polymarket short-horizon products.
-- Stronger ML / calibration layers with honest evaluation and paper-trading gates.
-
----
-
-## License
-
-MIT License. See the repository's `LICENSE` file.
+> 仓库中原有的 Nautilus / 15 分钟相关模块（`core/`、`bot/strategy.py`、`patches/` 等）作为遗留代码保留，**不在新引擎的默认路径上**。新引擎完全自包含。
 
 ---
 
-## Disclaimer
+## 10. 常见问题
 
-Trading cryptocurrencies and prediction-market instruments involves **substantial risk of loss**. This software is provided for **education and research**. Past performance does not guarantee future results. The authors are **not** responsible for any financial losses. Start in simulation, use small size, and only trade with capital you can afford to lose entirely.
+- **没装依赖能跑吗？** 能。`--test-mode` / `--simulation` 仅用标准库。实盘 `--live` 才需要 `py-clob-client`。
+- **Binance 行情拉不到？** 部分地区封禁 Binance，已默认用 Coinbase，并会自动回退。
+- **改了份额 / 滑点 / 模式要重启吗？** 改 `.env` 后重启进程即可（systemd 用 `systemctl restart jy-bot`）。不需要改代码。
 
 ---
 
-## Acknowledgments
+## 免责声明
 
-- [NautilusTrader](https://nautilustrader.io/) — Trading framework
-- [Polymarket](https://polymarket.com) — Prediction market venue
+加密货币与预测市场交易存在**重大亏损风险**。本软件仅用于学习与研究，过往表现不代表未来收益，作者不对任何资金损失负责。请先用模拟模式、小额资金，仅使用你能承受全部损失的资金进行交易。

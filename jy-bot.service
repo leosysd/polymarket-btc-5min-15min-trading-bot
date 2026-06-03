@@ -1,0 +1,36 @@
+[Unit]
+Description=Polymarket BTC 5-min UP/DOWN Trading Bot (jy-bot)
+After=network-online.target redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# --- EDIT THESE THREE for your machine -------------------------------------
+# User the bot runs as (do NOT run as root in production):
+User=jybot
+# Absolute path to the project directory (where main.py lives):
+WorkingDirectory=/opt/jy-bot
+# Command: supervisor auto-restarts the bot. Switch --simulation to --live
+# only AFTER setting DRY_RUN=false and LIVE_TRADING=true in .env.
+ExecStart=/opt/jy-bot/venv/bin/python /opt/jy-bot/supervisor.py --simulation
+# ---------------------------------------------------------------------------
+
+# Load secrets from .env (systemd reads KEY=VALUE lines).
+EnvironmentFile=/opt/jy-bot/.env
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+# Logging to the systemd journal (view with: journalctl -u jy-bot -f)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jy-bot
+
+# Hardening (safe defaults)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
